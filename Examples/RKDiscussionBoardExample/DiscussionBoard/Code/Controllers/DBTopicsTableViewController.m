@@ -8,8 +8,8 @@
 
 #import <Three20/Three20+Additions.h>
 #import "DBTopicsTableViewController.h"
-#import "DBTopic.h"
-#import "DBUser.h"
+#import "../Models/DBTopic.h"
+#import "../Models/DBUser.h"
 
 @implementation DBTopicsTableViewController
 
@@ -33,7 +33,11 @@
     RKObjectLoader* objectLoader = [[RKObjectManager sharedManager] objectLoaderWithResourcePath:@"/topics" delegate:nil];
     dataSource.model = [RKObjectLoaderTTModel modelWithObjectLoader:objectLoader];
     self.dataSource = dataSource;
-    
+}
+
+- (void)loadView {
+	[super loadView];
+
 	UIBarButtonItem* item = nil;
 	if ([[DBUser currentUser] isLoggedIn]) {
 		item = [[UIBarButtonItem alloc] initWithTitle:@"Logout" style:UIBarButtonItemStyleBordered target:self action:@selector(logoutButtonWasPressed:)];

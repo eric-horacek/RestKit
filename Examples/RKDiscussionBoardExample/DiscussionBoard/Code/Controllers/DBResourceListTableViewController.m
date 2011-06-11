@@ -9,9 +9,9 @@
 #import <RestKit/RestKit.h>
 #import <RestKit/Three20/Three20.h>
 #import "DBResourceListTableViewController.h"
-#import "DBManagedObjectCache.h"
-#import "DBUser.h"
-#import "DBContentObject.h"
+#import "../Other/DBManagedObjectCache.h"
+#import "../Models/DBUser.h"
+#import "../Models/DBContentObject.h"
 
 @implementation UINavigationBar (CustomImage)
 
