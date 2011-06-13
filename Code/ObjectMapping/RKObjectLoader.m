@@ -17,6 +17,10 @@
 #import "RKParserRegistry.h"
 #import "../Network/RKRequest_Internals.h"
 
+// Set Logging Component
+#undef RKLogComponent
+#define RKLogComponent lcl_cRestKitNetwork
+
 @implementation RKObjectLoader
 
 @synthesize objectManager = _objectManager, response = _response;
@@ -32,7 +36,7 @@
         _objectManager = objectManager;        
         [self.objectManager.client setupRequest:self];
 	}
-    
+
 	return self;
 }
 
@@ -122,15 +126,27 @@
         return nil;
     }
     
+    if ([self.delegate respondsToSelector:@selector(objectLoader:willMapData:)]) {
+        [(NSObject<RKObjectLoaderDelegate>*)self.delegate objectLoader:self willMapData:parsedData];
+    }
+    
     RKObjectMapper* mapper = [RKObjectMapper mapperWithObject:parsedData mappingProvider:mappingProvider];
     mapper.objectFactory = [self createObjectFactory];
     mapper.targetObject = targetObject;
     mapper.delegate = self;
     RKObjectMappingResult* result = [mapper performMapping];
     
+    if (nil == result && RKRequestMethodDELETE == self.method && [mapper.errors count] == 1) {
+        NSError* error = [mapper.errors objectAtIndex:0];
+        if (error.domain == RKRestKitErrorDomain && error.code == RKObjectMapperErrorUnmappableContent) {
+            // If this is a delete request, and the error is an "unmappable content" error, return an empty result
+            // because delete requests should allow for no objects to come back in the response (you just deleted the object).
+            result = [[[RKObjectMappingResult alloc] initWithDictionary:[NSDictionary dictionary]] autorelease];
+        }
+    }
+    
     if (nil == result) {
-        // TODO: Logging macros
-        NSLog(@"GOT MAPPING ERRORS: %@", mapper.errors);
+        RKLogError(@"Encountered errors during mapping: %@", [[mapper.errors valueForKey:@"localizedDescription"] componentsJoinedByString:@", "]);
         
         // TODO: Construct a composite error that wraps up all the other errors
         *error = [mapper.errors lastObject];
@@ -172,7 +188,7 @@
         return YES;
     }
     
-    RKLOG_MAPPING(RKLogLevelWarning, @"Unable to find parser for MIME Type '%@'", MIMEType);
+    RKLogWarning(@"Unable to find parser for MIME Type '%@'", MIMEType);
     return NO;
 }
 
@@ -196,15 +212,14 @@
         if (result) {
             error = [result asError];
         } else {
-            RKLOG_MAPPING(RKLogLevelWarning, @"Encountered an error while attempting to map server side errors from payload: %@", [error localizedDescription]);
+            RKLogError(@"Encountered an error while attempting to map server side errors from payload: %@", [error localizedDescription]);
         }
         
         [(NSObject<RKObjectLoaderDelegate>*)_delegate objectLoader:self didFailWithError:error];
         
 		return NO;
 	} else if ([self.response isSuccessful] && NO == [self canParseMIMEType:[self.response MIMEType]]) {
-        // TODO: Logging macros...
-        NSLog(@"Encountered unexpected response code: %d (MIME Type: %@)", self.response.statusCode, self.response.MIMEType);
+        RKLogWarning(@"Encountered unexpected response code: %d (MIME Type: %@)", self.response.statusCode, self.response.MIMEType);
         if ([_delegate respondsToSelector:@selector(objectLoaderDidLoadUnexpectedResponse:)]) {
             [(NSObject<RKObjectLoaderDelegate>*)_delegate objectLoaderDidLoadUnexpectedResponse:self];
         } else {
@@ -237,13 +252,19 @@
 - (void)didFailLoadWithError:(NSError*)error {
     NSAutoreleasePool* pool = [[NSAutoreleasePool alloc] init];
     
-	if ([_delegate respondsToSelector:@selector(request:didFailLoadWithError:)]) {
-		[_delegate request:self didFailLoadWithError:error];
-	}
-    
-	[(NSObject<RKObjectLoaderDelegate>*)_delegate objectLoader:self didFailWithError:error];
-    
-	[self finalizeLoad:NO];
+	if (_cachePolicy & RKRequestCachePolicyLoadOnError &&
+		[[[RKClient sharedClient] cache] hasResponseForRequest:self]) {
+
+		[self didFinishLoad:[[[RKClient sharedClient] cache] responseForRequest:self]];
+	} else {
+        if ([_delegate respondsToSelector:@selector(request:didFailLoadWithError:)]) {
+            [_delegate request:self didFailLoadWithError:error];
+        }
+        
+        [(NSObject<RKObjectLoaderDelegate>*)_delegate objectLoader:self didFailWithError:error];
+        
+        [self finalizeLoad:NO];
+    }
     
     [pool release];
 }
@@ -251,7 +272,17 @@
 // NOTE: We do NOT call super here. We are overloading the default behavior from RKRequest
 - (void)didFinishLoad:(RKResponse*)response {
 	_response = [response retain];
-    
+
+	if ((_cachePolicy & RKRequestCachePolicyEtag) && [response isNotModified]) {
+		[_response release];
+		_response = nil;
+		_response = [[[[RKClient sharedClient] cache] responseForRequest:self] retain];
+	}
+
+	if (![_response wasLoadedFromCache] && [_response isSuccessful] && (_cachePolicy != RKRequestCachePolicyNone)) {
+		[[[RKClient sharedClient] cache] storeResponse:_response forRequest:self];
+	}
+
     if ([_delegate respondsToSelector:@selector(request:didLoadResponse:)]) {
         [_delegate request:self didLoadResponse:response];
     }

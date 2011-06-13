@@ -14,12 +14,20 @@
 #import "RKClient.h"
 #import "../Support/Support.h"
 #import "RKURL.h"
-#import "Logging.h"
+#import "NSData+MD5.h"
+#import "NSString+MD5.h"
+#import "RKLog.h"
+#import "RKRequestCache.h"
+
+// Set Logging Component
+#undef RKLogComponent
+#define RKLogComponent lcl_cRestKitNetwork
 
 @implementation RKRequest
 
 @synthesize URL = _URL, URLRequest = _URLRequest, delegate = _delegate, additionalHTTPHeaders = _additionalHTTPHeaders,
-      			params = _params, userData = _userData, username = _username, password = _password, method = _method;
+            params = _params, userData = _userData, username = _username, password = _password, method = _method,
+            forceBasicAuthentication = _forceBasicAuthentication, cachePolicy = _cachePolicy, cache = _cache;
 
 #if TARGET_OS_IPHONE
 @synthesize backgroundPolicy = _backgroundPolicy, backgroundTaskIdentifier = _backgroundTaskIdentifier;
@@ -34,18 +42,20 @@
 	if (self) {
 		_URL = [URL retain];
 		_URLRequest = [[NSMutableURLRequest alloc] initWithURL:_URL];
+        [_URLRequest setCachePolicy:NSURLRequestReloadIgnoringCacheData];
 		_connection = nil;
 		_isLoading = NO;
 		_isLoaded = NO;
+        _forceBasicAuthentication = NO;
+		_cachePolicy = RKRequestCachePolicyDefault;
 	}
-    
 	return self;
 }
 
 - (id)initWithURL:(NSURL*)URL delegate:(id)delegate {
     self = [self initWithURL:URL];
 	if (self) {
-		_delegate = delegate;        
+		_delegate = delegate;
 	}
 	return self;
 }
@@ -55,7 +65,11 @@
     if (self) {        
 #if TARGET_OS_IPHONE
         _backgroundPolicy = RKRequestBackgroundPolicyNone;
-        _backgroundTaskIdentifier = UIBackgroundTaskInvalid;    
+        _backgroundTaskIdentifier = 0; 
+        BOOL backgroundOK = &UIBackgroundTaskInvalid != NULL;
+        if (backgroundOK) {
+            _backgroundTaskIdentifier = UIBackgroundTaskInvalid; 
+        }
 #endif
     }
     
@@ -64,11 +78,10 @@
 
 - (void)cleanupBackgroundTask {
     #if TARGET_OS_IPHONE
-    if (UIBackgroundTaskInvalid == self.backgroundTaskIdentifier) {
+    BOOL backgroundOK = &UIBackgroundTaskInvalid != NULL;
+    if (backgroundOK && UIBackgroundTaskInvalid == self.backgroundTaskIdentifier) {
         return;
     }
-    
-    NSLog(@"Cleaning up background task...");
     
     UIApplication* app = [UIApplication sharedApplication];
     if ([app respondsToSelector:@selector(beginBackgroundTaskWithExpirationHandler:)]) {
@@ -99,6 +112,8 @@
   	_username = nil;
   	[_password release];
   	_password = nil;
+    [_cache release];
+    _cache = nil;
     
     // Cleanup a background task if there is any
     [self cleanupBackgroundTask];
@@ -134,6 +149,24 @@
 			[_URLRequest setValue:[NSString stringWithFormat:@"%d", [_params HTTPHeaderValueForContentLength]] forHTTPHeaderField:@"Content-Length"];
 		}
 	}
+    
+    // Add authentication headers so we don't have to deal with an extra cycle for each message requiring basic auth.
+    if (self.forceBasicAuthentication) {        
+        CFHTTPMessageRef dummyRequest = CFHTTPMessageCreateRequest(kCFAllocatorDefault, (CFStringRef)[self HTTPMethod], (CFURLRef)[self URL], kCFHTTPVersion1_1);
+        
+        CFHTTPMessageAddAuthentication(dummyRequest, nil, (CFStringRef)_username, (CFStringRef)_password,kCFHTTPAuthenticationSchemeBasic, FALSE);
+        CFStringRef authorizationString = CFHTTPMessageCopyHeaderFieldValue(dummyRequest, CFSTR("Authorization"));
+        [_URLRequest setValue:(NSString *)authorizationString forHTTPHeaderField:@"Authorization"];
+        CFRelease(dummyRequest);
+        CFRelease(authorizationString);
+    }
+    
+    if (self.cachePolicy & RKRequestCachePolicyEtag) {
+        NSString* etag = [self.cache etagForRequest:self];
+        if (etag) {
+            [_URLRequest setValue:etag forHTTPHeaderField:@"If-None-Match"];
+        }
+    }
 }
 
 // Setup the NSURLRequest. The request must be prepared right before dispatching
@@ -181,7 +214,7 @@
 - (void)fireAsynchronousRequest {
     [self prepareURLRequest];
     NSString* body = [[NSString alloc] initWithData:[_URLRequest HTTPBody] encoding:NSUTF8StringEncoding];
-    NSLog(@"Sending %@ request to URL %@. HTTP Body: %@", [self HTTPMethod], [[self URL] absoluteString], body);
+    RKLogDebug(@"Sending %@ request to URL %@. HTTP Body: %@", [self HTTPMethod], [[self URL] absoluteString], body);
     [body release];        
     
     _isLoading = YES;    
@@ -202,7 +235,16 @@
 
 - (void)sendAsynchronously {
     _sentSynchronously = NO;
-	if ([self shouldDispatchRequest]) {        
+    if (self.cachePolicy & RKRequestCachePolicyEnabled) {
+        if ([self.cache hasResponseForRequest:self]) {
+            RKLogDebug(@"Found cached content, loading...");
+            _isLoading = YES;
+            [self didFinishLoad:[self.cache responseForRequest:self]];
+            return;
+        }
+    }
+    
+	if ([self shouldDispatchRequest]) {
 #if TARGET_OS_IPHONE
         // Background Request Policy support
         UIApplication* app = [UIApplication sharedApplication];
@@ -218,11 +260,11 @@
                                                        object:nil];
             [self fireAsynchronousRequest];
         } else if (self.backgroundPolicy == RKRequestBackgroundPolicyContinue) {
-            NSLog(@"Beginning background task to perform processing...");
+            RKLogInfo(@"Beginning background task to perform processing...");
             
             // Fork a background task for continueing a long-running request
             _backgroundTaskIdentifier = [app beginBackgroundTaskWithExpirationHandler:^{
-                NSLog(@"Background request time expired, canceling request.");
+                RKLogInfo(@"Background request time expired, canceling request.");
                 
                 [self cancelAndInformDelegate:NO];
                 [self cleanupBackgroundTask];
@@ -239,12 +281,20 @@
         [self fireAsynchronousRequest];
 #endif
 	} else {
-		NSString* errorMessage = [NSString stringWithFormat:@"The client is unable to contact the resource at %@", [[self URL] absoluteString]];
-		NSDictionary *userInfo = [NSDictionary dictionaryWithObjectsAndKeys:
-								  errorMessage, NSLocalizedDescriptionKey,
-								  nil];
-		NSError* error = [NSError errorWithDomain:RKRestKitErrorDomain code:RKRequestBaseURLOfflineError userInfo:userInfo];
-		[self didFailLoadWithError:error];
+	    if (_cachePolicy & RKRequestCachePolicyLoadIfOffline &&
+			[self.cache hasResponseForRequest:self]) {
+
+			_isLoading = YES;
+			[self didFinishLoad:[self.cache responseForRequest:self]];
+
+		} else {
+            NSString* errorMessage = [NSString stringWithFormat:@"The client is unable to contact the resource at %@", [[self URL] absoluteString]];
+    		NSDictionary *userInfo = [NSDictionary dictionaryWithObjectsAndKeys:
+    								  errorMessage, NSLocalizedDescriptionKey,
+    								  nil];
+    		NSError* error = [NSError errorWithDomain:RKRestKitErrorDomain code:RKRequestBaseURLOfflineError userInfo:userInfo];
+    		[self didFailLoadWithError:error];
+        }
 	}
 }
 
@@ -258,7 +308,7 @@
 	if ([self shouldDispatchRequest]) {
 		[self prepareURLRequest];
 		NSString* body = [[NSString alloc] initWithData:[_URLRequest HTTPBody] encoding:NSUTF8StringEncoding];
-		NSLog(@"Sending synchronous %@ request to URL %@. HTTP Body: %@", [self HTTPMethod], [[self URL] absoluteString], body);
+		RKLogDebug(@"Sending synchronous %@ request to URL %@. HTTP Body: %@", [self HTTPMethod], [[self URL] absoluteString], body);
 		[body release];
 
 		[[NSNotificationCenter defaultCenter] postNotificationName:RKRequestSentNotification object:self userInfo:nil];
@@ -278,16 +328,24 @@
 		} else {
 			[self didFinishLoad:response];
 		}
+        
 	} else {
-		NSString* errorMessage = [NSString stringWithFormat:@"The client is unable to contact the resource at %@", [[self URL] absoluteString]];
-		NSDictionary *userInfo = [NSDictionary dictionaryWithObjectsAndKeys:
-								  errorMessage, NSLocalizedDescriptionKey,
-								  nil];
-		error = [NSError errorWithDomain:RKRestKitErrorDomain code:RKRequestBaseURLOfflineError userInfo:userInfo];
-		[self didFailLoadWithError:error];
+		if (_cachePolicy & RKRequestCachePolicyLoadIfOffline &&
+			[self.cache hasResponseForRequest:self]) {
 
-		// TODO: Is this needed here?  Or can we just return a nil response and everyone will be happy??
-		response = [[[RKResponse alloc] initWithSynchronousRequest:self URLResponse:URLResponse body:payload error:error] autorelease];
+			response = [self.cache responseForRequest:self];
+
+		} else {
+			NSString* errorMessage = [NSString stringWithFormat:@"The client is unable to contact the resource at %@", [[self URL] absoluteString]];
+			NSDictionary *userInfo = [NSDictionary dictionaryWithObjectsAndKeys:
+									  errorMessage, NSLocalizedDescriptionKey,
+									  nil];
+			error = [NSError errorWithDomain:RKRestKitErrorDomain code:RKRequestBaseURLOfflineError userInfo:userInfo];
+			[self didFailLoadWithError:error];
+
+			// TODO: Is this needed here?  Or can we just return a nil response and everyone will be happy??
+			response = [[[RKResponse alloc] initWithSynchronousRequest:self URLResponse:URLResponse body:payload error:error] autorelease];
+		}
 	}
 
 	return response;
@@ -297,32 +355,50 @@
     [self cancelAndInformDelegate:YES];
 }
 
+// TODO: Isn't this code duplicated higher up???
 - (void)didFailLoadWithError:(NSError*)error {
-	_isLoading = NO;
+	if (_cachePolicy & RKRequestCachePolicyLoadOnError &&
+		[self.cache hasResponseForRequest:self]) {
 
-	if ([_delegate respondsToSelector:@selector(request:didFailLoadWithError:)]) {
-		[_delegate request:self didFailLoadWithError:error];
+		[self didFinishLoad:[self.cache responseForRequest:self]];
+	} else {
+		_isLoading = NO;
+
+		if ([_delegate respondsToSelector:@selector(request:didFailLoadWithError:)]) {
+			[_delegate request:self didFailLoadWithError:error];
+		}
+        
+		[[NSNotificationCenter defaultCenter] postNotificationName:RKRequestFailedWithErrorNotification object:self userInfo:nil];
 	}
-
-	[[NSNotificationCenter defaultCenter] postNotificationName:RKRequestFailedWithErrorNotification object:self userInfo:nil];
 }
 
 - (void)didFinishLoad:(RKResponse*)response {
   	_isLoading = NO;
   	_isLoaded = YES;
     
-    RKLOG_NETWORK(RKLogLevelInfo, @"Body: %@", [response bodyAsString]);
+    RKLogInfo(@"Status Code: %d", [response statusCode]);
+    RKLogInfo(@"Body: %@", [response bodyAsString]);
 
-  	if ([_delegate respondsToSelector:@selector(request:didLoadResponse:)]) {
-  		[_delegate request:self didLoadResponse:response];
-  	}
-  
+	RKResponse* finalResponse = response;
+
+	if ((_cachePolicy & RKRequestCachePolicyEtag) && [response isNotModified]) {
+		finalResponse = [self.cache responseForRequest:self];
+	}
+
+	if (![response wasLoadedFromCache] && [response isSuccessful] && (_cachePolicy != RKRequestCachePolicyNone)) {
+		[self.cache storeResponse:response forRequest:self];
+	}
+
+	if ([_delegate respondsToSelector:@selector(request:didLoadResponse:)]) {
+		[_delegate request:self didLoadResponse:finalResponse];
+	}
+    
     if ([response isServiceUnavailable]) {
         [[NSNotificationCenter defaultCenter] postNotificationName:RKServiceDidBecomeUnavailableNotification object:self];
     }
     
-    NSDictionary* userInfo = [NSDictionary dictionaryWithObject:response forKey:@"response"];
-    [[NSNotificationCenter defaultCenter] postNotificationName:RKRequestDidLoadResponseNotification object:self userInfo:userInfo];
+    NSDictionary* userInfo = [NSDictionary dictionaryWithObject:finalResponse forKey:@"response"];
+	[[NSNotificationCenter defaultCenter] postNotificationName:RKRequestDidLoadResponseNotification object:self userInfo:userInfo];
     
     // NOTE: This notification must be posted last as the request queue releases the request when it
     // receives the notification
@@ -377,6 +453,14 @@
         [self send];
     }
 #endif
+}
+
+- (NSString*)cacheKey {
+    if (_method == RKRequestMethodDELETE) {
+        return nil;
+    }
+    NSString* compositCacheKey = [NSString stringWithFormat:@"%@-%d-%@", self.URL, _method, [_URLRequest HTTPBody]];
+    return [compositCacheKey MD5];
 }
 
 @end

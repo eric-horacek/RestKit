@@ -11,6 +11,7 @@
 #import "RKResponse.h"
 #import "NSDictionary+RKRequestSerialization.h"
 #import "RKReachabilityObserver.h"
+#import "RKRequestCache.h"
 
 /////////////////////////////////////////////////////////////////////////
 
@@ -121,11 +122,14 @@ NSString* RKPathAppendQueryParams(NSString* resourcePath, NSDictionary* queryPar
 	NSString* _baseURL;
 	NSString* _username;
 	NSString* _password;
+    BOOL _forceBasicAuthentication;
 	NSMutableDictionary* _HTTPHeaders;
 	RKReachabilityObserver* _baseURLReachabilityObserver;
 	NSString* _serviceUnavailableAlertTitle;
 	NSString* _serviceUnavailableAlertMessage;
 	BOOL _serviceUnavailableAlertEnabled;
+	RKRequestCache* _cache;
+	RKRequestCachePolicy _cachePolicy;
 }
 
 /////////////////////////////////////////////////////////////////////////
@@ -175,6 +179,15 @@ NSString* RKPathAppendQueryParams(NSString* resourcePath, NSDictionary* queryPar
 @property(nonatomic, retain) NSString* password;
 
 /**
+ When YES, RKRequest objects dispatched through the client will have an HTTP Basic
+ Authorization header added before being sent.
+ 
+ This avoids an HTTP AUTH challenge before authentication and can be used to force
+ authentication is situations where an AUTH challenge is not issued
+ */
+@property(nonatomic, assign) BOOL forceBasicAuthentication;
+
+/**
  * The RKReachabilityObserver used to monitor whether or not the client has a connection
  * path to the baseURL.
  *
@@ -213,6 +226,10 @@ NSString* RKPathAppendQueryParams(NSString* resourcePath, NSDictionary* queryPar
  * *Default*: _NO_
  */
 @property(nonatomic, assign) BOOL serviceUnavailableAlertEnabled;
+
+@property (nonatomic, retain) RKRequestCache* cache;
+
+@property (nonatomic, assign) RKRequestCachePolicy cachePolicy;
 
 /////////////////////////////////////////////////////////////////////////
 /// @name Shared Client Instance

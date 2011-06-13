@@ -12,6 +12,7 @@
 #import "RKURL.h"
 #import "RKNotifications.h"
 #import "RKAlert.h"
+#import "RKLog.h"
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Global
@@ -32,7 +33,7 @@ NSString* RKMakeURLPath(NSString* resourcePath) {
 NSString* RKMakePathWithObject(NSString* path, id object) {
 	NSMutableDictionary* substitutions = [NSMutableDictionary dictionary];
 	NSScanner* scanner = [NSScanner scannerWithString:path];
-	
+
 	BOOL startsWithParentheses = [[path substringToIndex:1] isEqualToString:@"("];
 	while ([scanner isAtEnd] == NO) {
 		NSString* keyPath = nil;
@@ -49,20 +50,20 @@ NSString* RKMakePathWithObject(NSString* path, id object) {
 			}
 		}
 	}
-	
+
 	if (0 == [substitutions count]) {
 		return path;
 	}
-	
+
 	NSMutableString* interpolatedPath = [[path mutableCopy] autorelease];
 	for (NSString* find in substitutions) {
 		NSString* replace = [substitutions valueForKey:find];
-		[interpolatedPath replaceOccurrencesOfString:find 
-										  withString:replace 													 
-											 options:NSLiteralSearch 
+		[interpolatedPath replaceOccurrencesOfString:find
+										  withString:replace
+											 options:NSLiteralSearch
 											   range:NSMakeRange(0, [interpolatedPath length])];
 	}
-	
+
 	return [NSString stringWithString:interpolatedPath];
 }
 
@@ -77,11 +78,14 @@ NSString* RKPathAppendQueryParams(NSString* resourcePath, NSDictionary* queryPar
 @synthesize baseURL = _baseURL;
 @synthesize username = _username;
 @synthesize password = _password;
+@synthesize forceBasicAuthentication = _forceBasicAuthentication;
 @synthesize HTTPHeaders = _HTTPHeaders;
 @synthesize baseURLReachabilityObserver = _baseURLReachabilityObserver;
 @synthesize serviceUnavailableAlertTitle = _serviceUnavailableAlertTitle;
 @synthesize serviceUnavailableAlertMessage = _serviceUnavailableAlertMessage;
 @synthesize serviceUnavailableAlertEnabled = _serviceUnavailableAlertEnabled;
+@synthesize cache = _cache;
+@synthesize cachePolicy = _cachePolicy;
 
 + (RKClient*)sharedClient {
 	return sharedClient;
@@ -94,9 +98,19 @@ NSString* RKPathAppendQueryParams(NSString* resourcePath, NSDictionary* queryPar
 
 + (RKClient*)clientWithBaseURL:(NSString*)baseURL {
 	RKClient* client = [[[RKClient alloc] init] autorelease];
+	NSString* cacheDirForClient = [NSString stringWithFormat:@"RKClientRequestCache-%@",
+								   [[NSURL URLWithString:baseURL] host]];
+	NSString* cachePath = [[NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES) objectAtIndex:0]
+						   stringByAppendingPathComponent:cacheDirForClient];
+	client.cache = [[RKRequestCache alloc] initWithCachePath:cachePath
+											   storagePolicy:RKRequestCacheStoragePolicyPermanently];
+	client.cachePolicy = RKRequestCachePolicyDefault;
 	client.baseURL = baseURL;
 	if (sharedClient == nil) {
 		[RKClient setSharedClient:client];
+        
+        // Initialize Logging as soon as a client is created
+        RKLogInitialize();
 	}
 
 	return client;
@@ -132,8 +146,9 @@ NSString* RKPathAppendQueryParams(NSString* resourcePath, NSDictionary* queryPar
 	self.password = nil;
 	self.serviceUnavailableAlertTitle = nil;
 	self.serviceUnavailableAlertMessage = nil;
+	self.cache = nil;
 	[_HTTPHeaders release];
-    
+
 	[super dealloc];
 }
 
@@ -168,6 +183,9 @@ NSString* RKPathAppendQueryParams(NSString* resourcePath, NSDictionary* queryPar
 	request.additionalHTTPHeaders = _HTTPHeaders;
 	request.username = self.username;
 	request.password = self.password;
+    request.forceBasicAuthentication = self.forceBasicAuthentication;
+	request.cachePolicy = self.cachePolicy;
+    request.cache = self.cache;
 }
 
 - (void)setValue:(NSString*)value forHTTPHeaderField:(NSString*)header {
@@ -181,7 +199,7 @@ NSString* RKPathAppendQueryParams(NSString* resourcePath, NSDictionary* queryPar
 
 	[_baseURLReachabilityObserver release];
 	_baseURLReachabilityObserver = nil;
-    
+
     // Don't crash if baseURL is nil'd out (i.e. dealloc)
     if (baseURL) {
         NSURL* URL = [NSURL URLWithString:baseURL];

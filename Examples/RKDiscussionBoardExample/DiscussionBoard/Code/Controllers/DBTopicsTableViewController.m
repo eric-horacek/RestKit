@@ -8,8 +8,8 @@
 
 #import <Three20/Three20+Additions.h>
 #import "DBTopicsTableViewController.h"
-#import "DBTopic.h"
-#import "DBUser.h"
+#import "../Models/DBTopic.h"
+#import "../Models/DBUser.h"
 
 @implementation DBTopicsTableViewController
 
@@ -17,15 +17,26 @@
 	if (self = [super initWithNavigatorURL:URL query:query]) {
 		self.title = @"Topics";
 		_tableTitleHeaderLabel.text = @"Recent Topics";
-		
-		_resourcePath = [@"/topics" retain];
-		_resourceClass = [DBTopic class];
 	}
 	return self;
 }
 
 - (void)createModel {
-	[super createModel];
+    /**
+     Map loaded objects into Three20 Table Item instances!
+     */
+    RKObjectTTTableViewDataSource* dataSource = [RKObjectTTTableViewDataSource dataSource];
+    RKObjectMapping* mapping = [RKObjectMapping mappingForClass:[TTTableTextItem class]];
+    [mapping mapKeyPath:@"name" toAttribute:@"text"];
+    [mapping mapKeyPath:@"topicNavURL" toAttribute:@"URL"];
+    [dataSource mapObjectClass:[DBTopic class] toTableItemWithMapping:mapping];
+    RKObjectLoader* objectLoader = [[RKObjectManager sharedManager] objectLoaderWithResourcePath:@"/topics" delegate:nil];
+    dataSource.model = [RKObjectLoaderTTModel modelWithObjectLoader:objectLoader];
+    self.dataSource = dataSource;
+}
+
+- (void)loadView {
+	[super loadView];
 
 	UIBarButtonItem* item = nil;
 	if ([[DBUser currentUser] isLoggedIn]) {
@@ -49,24 +60,6 @@
 
 - (void)logoutButtonWasPressed:(id)sender {
 	[[DBUser currentUser] logout];
-}
-
-- (void)didLoadModel:(BOOL)firstTime {
-	[super didLoadModel:firstTime];
-	
-	RKRequestTTModel* model = (RKRequestTTModel*)self.model;
-	NSMutableArray* items = [NSMutableArray arrayWithCapacity:[model.objects count]];
-
-	for (DBTopic* topic in model.objects) {
-		NSString* topicPostsURL = RKMakePathWithObject(@"db://topics/(topicID)/posts", topic);
-		[items addObject:[TTTableTextItem itemWithText:topic.name URL:topicPostsURL]];
-	}
-
-	// Ensure that the datasource's model is still the RKRequestTTModel;
-	// Otherwise isOutdated will not work.
-	TTListDataSource* dataSource = [TTListDataSource dataSourceWithItems:items];
-	dataSource.model = model;
-	self.dataSource = dataSource;
 }
 
 @end

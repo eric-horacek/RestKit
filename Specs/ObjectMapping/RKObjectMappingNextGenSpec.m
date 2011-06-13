@@ -13,7 +13,7 @@
 #import "RKObjectMappingOperation.h"
 #import "RKObjectAttributeMapping.h"
 #import "RKObjectRelationshipMapping.h"
-#import "Logging.h"
+#import "RKLog.h"
 #import "RKObjectMapper.h"
 #import "RKObjectMapper_Private.h"
 #import "RKObjectMapperError.h"
@@ -138,21 +138,8 @@
 @implementation RKObjectMappingNextGenSpec
 
 - (void)beforeAll {
-//    LoggerSetViewerHost(NULL, (CFStringRef) @"localhost", 50000);    
-    LoggerSetOptions(NULL,						// configure the default logger
-                     kLoggerOption_LogToConsole | 
-                     kLoggerOption_BufferLogsUntilConnection |
-                     kLoggerOption_UseSSL |
-                     kLoggerOption_BrowseBonjour |
-                     kLoggerOption_BrowseOnlyLocalDomain);
-    LoggerStart(LoggerGetDefaultLogger());
-    LogMessage(@"Object Mapping", 10, @"Starting object mapping specs...");
-    LoggerFlush(NULL, NO);
-}
-
-- (void)afterAll {
-    // TODO: Maybe a 5 second wait?
-    LoggerFlush(NULL, NO);
+    RKLogConfigureByName("RestKit/Object Mapping", RKLogLevelCritical);
+    RKLogConfigureByName("RestKit/Network", RKLogLevelDebug);
 }
 
 #pragma mark - RKObjectKeyPathMapping Specs
@@ -746,6 +733,37 @@
     [expectThat([[user isDeveloper] boolValue]) should:be(YES)]; 
 }
 
+- (void)itShouldMapAShortTrueStringToANumberBool {
+    RKObjectMapping* mapping = [RKObjectMapping mappingForClass:[RKExampleUser class]];
+    RKObjectAttributeMapping* websiteMapping = [RKObjectAttributeMapping mappingFromKeyPath:@"is_developer" toKeyPath:@"isDeveloper"];
+    [mapping addAttributeMapping:websiteMapping];
+    
+    NSDictionary* dictionary = [RKSpecParseFixtureJSON(@"user.json") mutableCopy];
+    RKExampleUser* user = [RKExampleUser user];
+    [dictionary setValue:@"T" forKey:@"is_developer"];
+    RKObjectMappingOperation* operation = [[RKObjectMappingOperation alloc] initWithSourceObject:dictionary destinationObject:user objectMapping:mapping];
+    NSError* error = nil;
+    [operation performMapping:&error];
+    
+    [expectThat([[user isDeveloper] boolValue]) should:be(YES)]; 
+}
+
+
+- (void)itShouldMapAShortFalseStringToANumberBool {
+    RKObjectMapping* mapping = [RKObjectMapping mappingForClass:[RKExampleUser class]];
+    RKObjectAttributeMapping* websiteMapping = [RKObjectAttributeMapping mappingFromKeyPath:@"is_developer" toKeyPath:@"isDeveloper"];
+    [mapping addAttributeMapping:websiteMapping];
+    
+    NSDictionary* dictionary = [RKSpecParseFixtureJSON(@"user.json") mutableCopy];
+    RKExampleUser* user = [RKExampleUser user];
+    [dictionary setValue:@"f" forKey:@"is_developer"];
+    RKObjectMappingOperation* operation = [[RKObjectMappingOperation alloc] initWithSourceObject:dictionary destinationObject:user objectMapping:mapping];
+    NSError* error = nil;
+    [operation performMapping:&error];
+    
+    [expectThat([[user isDeveloper] boolValue]) should:be(NO)]; 
+}
+
 - (void)itShouldMapAStringToANumber {
     RKObjectMapping* mapping = [RKObjectMapping mappingForClass:[RKExampleUser class]];
     RKObjectAttributeMapping* websiteMapping = [RKObjectAttributeMapping mappingFromKeyPath:@"lucky_number" toKeyPath:@"luckyNumber"];
@@ -774,6 +792,21 @@
     NSDecimalNumber* weight = user.weight;
     [expectThat([weight isKindOfClass:[NSDecimalNumber class]]) should:be(YES)];
     [expectThat([weight compare:[NSDecimalNumber decimalNumberWithString:@"131.3"]]) should:be(NSOrderedSame)];
+}
+
+
+- (void)itShouldMapANumberToAString {
+    RKObjectMapping* mapping = [RKObjectMapping mappingForClass:[RKExampleUser class]];
+    RKObjectAttributeMapping* websiteMapping = [RKObjectAttributeMapping mappingFromKeyPath:@"lucky_number" toKeyPath:@"name"];
+    [mapping addAttributeMapping:websiteMapping];
+    
+    NSDictionary* dictionary = RKSpecParseFixtureJSON(@"user.json");
+    RKExampleUser* user = [RKExampleUser user];
+    RKObjectMappingOperation* operation = [[RKObjectMappingOperation alloc] initWithSourceObject:dictionary destinationObject:user objectMapping:mapping];
+    NSError* error = nil;
+    [operation performMapping:&error];
+    
+    [expectThat(user.name) should:be(@"187")]; 
 }
 
 - (void)itShouldMapANestedKeyPathToAnAttribute {
@@ -1105,6 +1138,7 @@
     user.userID = [NSNumber numberWithInt:1];
     
     RKSpecResponseLoader* loader = [RKSpecResponseLoader responseLoader];
+    loader.timeout = 5;
     [objectManager getObject:user delegate:loader];
     [loader waitForResponse];
     assertThatBool(loader.success, is(equalToBool(YES)));

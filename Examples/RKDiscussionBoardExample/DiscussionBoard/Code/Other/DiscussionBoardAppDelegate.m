@@ -10,21 +10,22 @@
 
 // RestKit
 #import <RestKit/RestKit.h>
+#import <RestKit/CoreData/CoreData.h>
 
 // Three20
 #import <Three20/Three20.h>
 #import <Three20/Three20+Additions.h>
 
 // Discussion Board
-#import "DBTopicsTableViewController.h"
-#import "DBTopic.h"
-#import "DBPostsTableViewController.h"
-#import "DBPost.h"
 #import "DBManagedObjectCache.h"
-#import "DBTopicViewController.h"
-#import "DBLoginOrSignUpViewController.h"
-#import "DBUser.h"
-#import "DBPostTableViewController.h"
+#import "../Controllers/DBTopicViewController.h"
+#import "../Controllers/DBTopicsTableViewController.h"
+#import "../Controllers/DBPostsTableViewController.h"
+#import "../Controllers/DBPostTableViewController.h"
+#import "../Controllers/DBLoginOrSignUpViewController.h"
+#import "../Models/DBTopic.h"
+#import "../Models/DBPost.h"
+#import "../Models/DBUser.h"
 
 /**
  * The HTTP Header Field we transmit the authentication token obtained
@@ -43,11 +44,7 @@ static NSString* const kDBAccessTokenHTTPHeaderField = @"X-USER-ACCESS-TOKEN";
 
 	// Set the default refresh rate to 1. This means we should always hit the web if we can.
 	// If the server is unavailable, we will load from the Core Data cache.
-	[RKRequestTTModel setDefaultRefreshRate:1];
-
-	// Set nil for any attributes we expect to appear in the payload, but do not
-    // TODO: Fix this. Now settable on a per-object basis
-//	objectManager.mapper.missingElementMappingPolicy = RKSetNilForMissingElementMappingPolicy;
+	[RKObjectLoaderTTModel setDefaultRefreshRate:1];
 
 	// Initialize object store
 	// We are using the Core Data support, so we have initialized a managed object store backed
@@ -60,7 +57,9 @@ static NSString* const kDBAccessTokenHTTPHeaderField = @"X-USER-ACCESS-TOKEN";
 	// The object mapper is responsible for mapping JSON encoded representations of objects
 	// back to local object representations. Here we instruct RestKit how to connect
 	// sub-dictionaries of attributes to local classes.
-    RKObjectMapping* userMapping = [RKObjectMapping mappingForClass:[DBUser class]];
+    RKManagedObjectMapping* userMapping = [RKManagedObjectMapping mappingForClass:[DBUser class]];
+    userMapping.primaryKeyAttribute = @"userID";
+    userMapping.setNilForMissingRelationships = YES; // clear out any missing attributes (token on logout)
     [userMapping mapKeyPathsToAttributes:
      @"id", @"userID",
      @"email", @"email",
@@ -70,7 +69,16 @@ static NSString* const kDBAccessTokenHTTPHeaderField = @"X-USER-ACCESS-TOKEN";
      @"password_confirmation", @"passwordConfirmation",
      nil];
     
-    RKObjectMapping* topicMapping = [RKObjectMapping mappingForClass:[DBTopic class]];
+    RKManagedObjectMapping* topicMapping = [RKManagedObjectMapping mappingForClass:[DBTopic class]];
+    /**
+     * Informs RestKit which property contains the primary key for identifying
+     * this object. This is used to ensure that objects are updated
+     */
+    topicMapping.primaryKeyAttribute = @"topicID";
+    
+    /**
+     * Map keyPaths in the JSON to attributes of the DBTopic entity
+     */
     [topicMapping mapKeyPathsToAttributes:
      @"id", @"topicID",
      @"name", @"name",
@@ -78,9 +86,21 @@ static NSString* const kDBAccessTokenHTTPHeaderField = @"X-USER-ACCESS-TOKEN";
      @"created_at", @"createdAt",
      @"updated_at", @"updatedAt",
      nil];
+    
+    /**
+     * Informs RestKit which properties contain the primary key values that
+     * can be used to hydrate relationships to other objects. This hint enables
+     * RestKit to automatically maintain true Core Data relationships between objects
+     * in your local store.
+     *
+     * Here we have asked RestKit to connect the 'user' relationship by performing a
+     * primary key lookup with the value in 'userID' property. This is the declarative
+     * equivalent of doing self.user = [DBUser objectWithPrimaryKeyValue:self.userID];
+     */
     [topicMapping mapRelationship:@"user" withObjectMapping:userMapping];
     
-    RKObjectMapping* postMapping = [RKObjectMapping mappingForClass:[DBPost class]];
+    RKManagedObjectMapping* postMapping = [RKManagedObjectMapping mappingForClass:[DBPost class]];
+    postMapping.primaryKeyAttribute = @"postID";
     [postMapping mapKeyPathsToAttributes:
      @"id",@"postID",
      @"topic_id",@"topicID",
@@ -122,6 +142,26 @@ static NSString* const kDBAccessTokenHTTPHeaderField = @"X-USER-ACCESS-TOKEN";
 	[objectManager.router routeClass:[DBPost class] toResourcePath:@"/topics/(topicID)/posts/(postID)" forMethod:RKRequestMethodPUT];
 	[objectManager.router routeClass:[DBPost class] toResourcePath:@"/topics/(topicID)/posts/(postID)" forMethod:RKRequestMethodDELETE];
     
+    /**
+     Configure RestKit Logging
+     
+     RestKit ships with a robust logging framework that can be used to instrument
+     the libraries activities in great detail. Logging is configured by specifying a
+     logging component and a log level to use for that component.
+     
+     By default, RestKit is configured to log at the Info or Warning levels for all components
+     depending on the presence of the DEBUG pre-processor macro. This can be configured at run-time
+     via calls to RKLogConfigureByName as detailed below.
+     
+     See RKLog.h and lcl_log_components.h for details on the logging macros available
+     */
+    RKLogConfigureByName("RestKit", RKLogLevelTrace);
+    RKLogConfigureByName("RestKit/Network", RKLogLevelDebug);
+    RKLogConfigureByName("RestKit/ObjectMapping", RKLogLevelDebug);
+    
+    // Enable boatloads of trace info from the mapper
+    // RKLogConfigureByName("RestKit/ObjectMapping", RKLogLevelTrace);
+    
 	// Initialize Three20
 	TTURLMap* map = [[TTNavigator navigator] URLMap];
 	[map from:@"db://topics" toViewController:[DBTopicsTableViewController class]];
@@ -143,7 +183,7 @@ static NSString* const kDBAccessTokenHTTPHeaderField = @"X-USER-ACCESS-TOKEN";
 	// Initialize authenticated access if we have a logged in current User reference
 	DBUser* user = [DBUser currentUser];
 	if ([user isLoggedIn]) {
-		NSLog(@"Found logged in User record for username '%@' [Access Token: %@]", user.username, user.singleAccessToken);
+		RKLogInfo(@"Found logged in User record for username '%@' [Access Token: %@]", user.username, user.singleAccessToken);
 		[objectManager.client setValue:user.singleAccessToken forHTTPHeaderField:kDBAccessTokenHTTPHeaderField];
 	}
 	

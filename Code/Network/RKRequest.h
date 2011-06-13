@@ -14,6 +14,8 @@
 #import <CoreData/CoreData.h>
 #import "RKRequestSerializable.h"
 
+@class RKRequestCache;
+
 /**
  * HTTP methods for requests
  */
@@ -23,6 +25,28 @@ typedef enum RKRequestMethod {
 	RKRequestMethodPUT,
 	RKRequestMethodDELETE
 } RKRequestMethod;
+
+/**
+ * Cache policy for determining how to use RKCache
+ */
+typedef enum {
+	// Never use the cache
+    RKRequestCachePolicyNone = 0,
+
+	// Load from the cache when we are offline
+    RKRequestCachePolicyLoadIfOffline = 1 << 0,
+
+	// Load from the cache if we encounter an error
+    RKRequestCachePolicyLoadOnError = 1 << 1,
+
+	// Load from the cache if we have data stored and the server returns a 304 (not modified) response
+    RKRequestCachePolicyEtag = 1 << 2,
+    
+    // Load from the cache if we have data stored
+    RKRequestCachePolicyEnabled = 1 << 3,
+
+    RKRequestCachePolicyDefault = RKRequestCachePolicyEtag
+} RKRequestCachePolicy;
 
 /**
  * Background Request Policy
@@ -55,8 +79,11 @@ typedef enum RKRequestBackgroundPolicy {
 	RKRequestMethod _method;
 	BOOL _isLoading;
 	BOOL _isLoaded;
+	RKRequestCachePolicy _cachePolicy;
     BOOL _sentSynchronously;
+    BOOL _forceBasicAuthentication;
     RKRequestBackgroundPolicy _backgroundPolicy;
+    RKRequestCache* _cache;
     
     #if TARGET_OS_IPHONE
     UIBackgroundTaskIdentifier _backgroundTaskIdentifier;
@@ -116,11 +143,15 @@ typedef enum RKRequestBackgroundPolicy {
 /**
  * Credentials for HTTP AUTH Challenge
  */
-
-// The authentication scheme to use. When set to kCFHTTPAuthenticationSchemeBasic, authentication will
-// be setup before a challenge occurs
 @property(nonatomic, retain) NSString* username;
 @property(nonatomic, retain) NSString* password;
+
+/**
+ When YES, RestKit will assume you are using HTTP Basic Authentication
+ and add an Authorization header to the request. This will force authentication
+ without being challenged.
+ */
+@property(nonatomic, assign) BOOL forceBasicAuthentication;
 
 /**
  * The underlying NSMutableURLRequest sent for this request
@@ -131,6 +162,11 @@ typedef enum RKRequestBackgroundPolicy {
  * The HTTP method as a string used for this request
  */
 @property(nonatomic, readonly) NSString* HTTPMethod;
+
+@property (nonatomic, readonly) NSString* cacheKey;
+
+@property (nonatomic, assign) RKRequestCachePolicy cachePolicy;
+@property (nonatomic, retain) RKRequestCache* cache;
 
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
