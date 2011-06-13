@@ -112,7 +112,7 @@
 		257FB70A1395DC44003A628E /* RKManagedObjectMappingOperation.m in Sources */ = {isa = PBXBuildFile; fileRef = 257FB7081395DC44003A628E /* RKManagedObjectMappingOperation.m */; };
 		257FB70D1395DEB5003A628E /* RKManagedObjectMappingOperationSpec.m in Sources */ = {isa = PBXBuildFile; fileRef = 257FB70C1395DEB5003A628E /* RKManagedObjectMappingOperationSpec.m */; };
 		258A92691379D18A00D80034 /* RKObjectFactory.h in Headers */ = {isa = PBXBuildFile; fileRef = 258A92681379D18A00D80034 /* RKObjectFactory.h */; settings = {ATTRIBUTES = (Public, ); }; };
-		258A926C1379D41F00D80034 /* RKManagedObjectFactory.h in Headers */ = {isa = PBXBuildFile; fileRef = 258A926A1379D41F00D80034 /* RKManagedObjectFactory.h */; settings = {ATTRIBUTES = (Private, ); }; };
+		258A926C1379D41F00D80034 /* RKManagedObjectFactory.h in Headers */ = {isa = PBXBuildFile; fileRef = 258A926A1379D41F00D80034 /* RKManagedObjectFactory.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		258A926D1379D41F00D80034 /* RKManagedObjectFactory.m in Sources */ = {isa = PBXBuildFile; fileRef = 258A926B1379D41F00D80034 /* RKManagedObjectFactory.m */; };
 		258C6688133C377A004388A4 /* libUISpec.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 258C6687133C377A004388A4 /* libUISpec.a */; };
 		25901D7C137B6CF60002ECEB /* RKManagedObjectFactorySpec.m in Sources */ = {isa = PBXBuildFile; fileRef = 25901D7B137B695F0002ECEB /* RKManagedObjectFactorySpec.m */; };
@@ -1391,8 +1391,8 @@
 				7377FBE21268E96300868752 /* RKManagedObjectCache.h in Headers */,
 				25431EBB1255640800A315CF /* CoreData.h in Headers */,
 				257FB677139559A4003A628E /* RKManagedObjectMapping.h in Headers */,
-				257FB683139582C5003A628E /* NSManagedObject+ActiveRecord.h in Headers */,
 				258A926C1379D41F00D80034 /* RKManagedObjectFactory.h in Headers */,
+				257FB683139582C5003A628E /* NSManagedObject+ActiveRecord.h in Headers */,
 				25A1CA87137C521C00A7D5C9 /* RKManagedObjectThreadSafeInvocation.h in Headers */,
 				257FB7091395DC44003A628E /* RKManagedObjectMappingOperation.h in Headers */,
 			);
