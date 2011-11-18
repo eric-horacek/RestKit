@@ -51,7 +51,12 @@
 
 - (id)asObject {
     // TODO: Warn that only last object was returned...
-    return [[self asCollection] objectAtIndex:0];
+    
+    if (self.asCollection.count > 0) {
+        return [[self asCollection] objectAtIndex:0];
+    } else {
+        return nil;
+    }
 }
 
 - (NSError*)asError {

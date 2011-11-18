@@ -2115,8 +2115,12 @@
 		1DEB922308733DC00010E9CD /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = "$(ARCHS_STANDARD_32_BIT)";
-				"ARCHS[sdk=macosx*]" = "$(ARCHS_STANDARD_32_64_BIT)";
+				ARCHS = (
+					i386,
+					x86_64,
+					armv6,
+					armv7,
+				);
 				BUILD_STYLE = Debug;
 				GCC_C_LANGUAGE_STANDARD = c99;
 				GCC_OPTIMIZATION_LEVEL = 0;
@@ -2124,6 +2128,7 @@
 				GCC_WARN_ABOUT_RETURN_TYPE = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 3.0;
+				ONLY_ACTIVE_ARCH = YES;
 				OTHER_LDFLAGS = "-ObjC";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -2136,14 +2141,19 @@
 		1DEB922408733DC00010E9CD /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = "$(ARCHS_STANDARD_32_BIT)";
-				"ARCHS[sdk=macosx*]" = "$(ARCHS_STANDARD_32_64_BIT)";
+				ARCHS = (
+					i386,
+					x86_64,
+					armv6,
+					armv7,
+				);
 				BUILD_STYLE = Release;
 				GCC_C_LANGUAGE_STANDARD = c99;
 				GCC_PREFIX_HEADER = Code/Support/RestKit_Prefix.pch;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 3.0;
+				ONLY_ACTIVE_ARCH = NO;
 				OTHER_LDFLAGS = "-ObjC";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -2213,14 +2223,19 @@
 		253216491338CA940099A5DB /* Distribution */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = "$(ARCHS_STANDARD_32_BIT)";
-				"ARCHS[sdk=macosx*]" = "$(ARCHS_STANDARD_32_64_BIT)";
+				ARCHS = (
+					i386,
+					x86_64,
+					armv6,
+					armv7,
+				);
 				BUILD_STYLE = Release;
 				GCC_C_LANGUAGE_STANDARD = c99;
 				GCC_PREFIX_HEADER = Code/Support/RestKit_Prefix.pch;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 3.0;
+				ONLY_ACTIVE_ARCH = YES;
 				OTHER_LDFLAGS = "-ObjC";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;

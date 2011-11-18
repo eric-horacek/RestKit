@@ -62,7 +62,7 @@ NSString* const RKDefaultSeedDatabaseFileName = @"RKSeedDatabase.sqlite";
         
         // If the user hasn't configured an object store, set one up for them
         if (nil == _manager.objectStore) {
-            _manager.objectStore = [RKManagedObjectStore objectStoreWithStoreFilename:RKDefaultSeedDatabaseFileName];
+            _manager.objectStore = [RKManagedObjectStore objectStoreWithStoreFilename:RKDefaultSeedDatabaseFileName delegate:_delegate];
         }
         
         // Delete any existing persistent store

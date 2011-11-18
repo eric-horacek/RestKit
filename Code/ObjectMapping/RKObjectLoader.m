@@ -216,6 +216,7 @@
         }
         
         [(NSObject<RKObjectLoaderDelegate>*)_delegate objectLoader:self didFailWithError:error];
+        [self finalizeLoad:NO];
         
 		return NO;
 	} else if ([self.response isSuccessful] && NO == [self canParseMIMEType:[self.response MIMEType]]) {

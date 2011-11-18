@@ -11,5 +11,6 @@
 #import "NSManagedObject+ActiveRecord.h"
 #import "RKManagedObjectStore.h"
 #import "RKManagedObjectSeeder.h"
+#import "RKManagedObjectLoader.h"
 #import "RKManagedObjectCache.h"
 #import "RKManagedObjectMapping.h"
