@@ -2120,6 +2120,7 @@
 					x86_64,
 					armv6,
 					armv7,
+					armv7s,
 				);
 				BUILD_STYLE = Debug;
 				GCC_C_LANGUAGE_STANDARD = c99;
@@ -2135,7 +2136,7 @@
 				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos macosx";
 				SYMROOT = Build;
-				VALID_ARCHS = "armv6 armv7 i386 x86_64";
+				VALID_ARCHS = "armv6 armv7 i386 x86_64 armv7s";
 			};
 			name = Debug;
 		};
@@ -2147,6 +2148,7 @@
 					x86_64,
 					armv6,
 					armv7,
+					armv7s,
 				);
 				BUILD_STYLE = Release;
 				GCC_C_LANGUAGE_STANDARD = c99;
@@ -2161,7 +2163,7 @@
 				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos macosx";
 				SYMROOT = Build;
-				VALID_ARCHS = "armv6 armv7 i386 x86_64";
+				VALID_ARCHS = "armv6 armv7 i386 x86_64 armv7s";
 			};
 			name = Release;
 		};
@@ -2232,6 +2234,7 @@
 					x86_64,
 					armv6,
 					armv7,
+					armv7s,
 				);
 				BUILD_STYLE = Release;
 				GCC_C_LANGUAGE_STANDARD = c99;
@@ -2246,7 +2249,7 @@
 				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos macosx";
 				SYMROOT = Build;
-				VALID_ARCHS = "armv6 armv7 i386 x86_64";
+				VALID_ARCHS = "armv6 armv7 i386 x86_64 armv7s";
 			};
 			name = Distribution;
 		};
